@@ -5,16 +5,12 @@ import UserDetailsCard from "./UserDetailsCard";
 
 const backendUrl = process.env.REACT_APP_API_URL;
 
-console.log("REACT_APP_API_URL:", process.env.REACT_APP_API_URL);
-
-console.log("backendUrl:", backendUrl);
-
 const TypingTest = () => {
   const [givenText, setGivenText] = useState("");
   const [userInput, setUserInput] = useState("");
   const [mistakes, setMistakes] = useState(0);
-  const [halfTime, setHalfTime] = useState(120); // 2 minutes default
-  const [breakTime, setBreakTime] = useState(30); // 30 seconds default
+  const [halfTime, setHalfTime] = useState(120); // 2mins default = 120s
+  const [breakTime, setBreakTime] = useState(30); // 30s default
   const [timeLeft, setTimeLeft] = useState(120);
   const [isBreak, setIsBreak] = useState(false);
   const [isActive, setIsActive] = useState(false);
@@ -44,6 +40,29 @@ const TypingTest = () => {
     },
   });
 
+  const metricsRef = useRef({
+    charactersTyped: 0,
+    mistakes: 0,
+    intervals: {
+      firstHalf: [],
+      secondHalf: [],
+    },
+  });
+
+  // Update refs when state changes
+  useEffect(() => {
+    metricsRef.current.charactersTyped = charactersTyped;
+    metricsRef.current.mistakes = mistakes;
+
+    // console.log("Metrics ref updated:", {
+    //   charactersTyped,
+    //   mistakes,
+    //   timeLeft,
+    // });
+  }, [charactersTyped, mistakes, timeLeft]);
+
+  const stats = []; // [{t: 20, m: 5}, {t: 40, m: 10}, {t: 60, m: 15}]
+
   useEffect(() => {
     fetchRandomText();
     fetchSettings();
@@ -61,7 +80,7 @@ const TypingTest = () => {
   const fetchSettings = async () => {
     try {
       const response = await axios.get(`${backendUrl}/settings`);
-      console.log("Settings response:", response.data);
+      // console.log("Settings response:", response.data);
       setHalfTime(response.data.halfTime || 120);
       setBreakTime(response.data.breakTime || 30);
       setTimeLeft(response.data.halfTime || 120);
@@ -73,7 +92,7 @@ const TypingTest = () => {
   const fetchRandomText = async () => {
     try {
       const response = await axios.get(`${backendUrl}/texts/random`);
-      console.log("Text response:", response.data);
+      // console.log("Text response:", response.data);
       setGivenText(response.data.content);
       mistakeTracker.current = new Array(response.data.content.length).fill(
         false
@@ -86,45 +105,73 @@ const TypingTest = () => {
 
   const handleUserSubmit = async (data) => {
     try {
-      console.log(data);
-      // const response = await axios.post(`${backendUrl}/users`, data);
+      // console.log(data);
+      const response = await axios.post(`${backendUrl}/users`, data);
       setUserId(123456);
       setUserData(data);
       setShowModal(false);
       setEnableEditor(true);
-      console.log("user submit handled");
+      // console.log("user submit handled");
     } catch (error) {
       console.error("Error saving user data:", error);
     }
   };
 
   const startMetricsTracking = () => {
-    if (metricsInterval) clearInterval(metricsInterval);
+    // console.log("Starting new metrics tracking session");
+
+    if (metricsInterval) {
+      // console.log("Clearing existing metrics intervals:", metricsInterval);
+      clearInterval(metricsInterval);
+    }
+
+    
+
+    // Reset the intervals for current half
+    const currentHalf = isSecondHalf ? "secondHalf" : "firstHalf";
+    metricsRef.current.intervals[currentHalf] = [];
 
     let startTime = Date.now();
     const interval = setInterval(() => {
       const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-      const currentHalf = isSecondHalf ? "secondHalf" : "firstHalf";
+      // const currentHalf = isSecondHalf ? "secondHalf" : "firstHalf";
 
-      setCurrentMetrics((prev) => ({
-        ...prev,
-        [currentHalf]: {
-          ...prev[currentHalf],
-          intervals: [
-            ...prev[currentHalf].intervals,
-            {
-              timestamp: elapsedSeconds,
-              charactersTyped: charactersTyped,
-              mistakes: mistakes,
-            },
-          ],
-          totalMistakes: mistakes,
-          totalCharactersTyped: charactersTyped,
-        },
-      }));
-    }, 10000); // every 10 seconds
+      // Use the ref to get latest values
+      const newInterval = {
+        timestamp: elapsedSeconds,
+        charactersTyped: metricsRef.current.charactersTyped,
+        mistakes: metricsRef.current.mistakes,
+      };
 
-    console.log("Current metrics:", currentMetrics);
+      console.log(`Metrics Update at ${elapsedSeconds}s:`, newInterval, currentHalf);
+      //TODO: Save interval data to variable
+      const newStat = {
+        typed: newInterval.charactersTyped,
+        mistakes: newInterval.mistakes,
+      };
+      // console.log("newStat", newStat);
+      stats.push(newStat);
+      // console.log("Stats:", stats);
+      // Store interval data in ref
+      metricsRef.current.intervals[currentHalf].push(newInterval);
+
+      // Update the state with all accumulated data
+      //added if for checking break edit 1
+      if(!isBreak){
+      setCurrentMetrics((prev) => {
+        const newMetrics = {
+          ...prev,
+          [currentHalf]: {
+            intervals: [...metricsRef.current.intervals[currentHalf]],
+            totalMistakes: metricsRef.current.mistakes,
+            totalCharactersTyped: metricsRef.current.charactersTyped,
+          },
+        };
+        // console.log("Updated metrics state:", newMetrics);
+        return newMetrics;
+      });
+    }
+    }, 5000); // every 5 seconds
 
     setMetricsInterval(interval);
   };
@@ -139,7 +186,7 @@ const TypingTest = () => {
       clearInterval(timerRef.current);
     }
 
-    setIsActive(true);
+    setIsActive(true); // Start the timer
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -158,29 +205,35 @@ const TypingTest = () => {
   };
 
   const handleHalfTimeEnd = () => {
+    // console.log("First half completed. Storing first half stats:", {
+    //   charactersTyped,
+    //   mistakes,
+    //   timeSpent: halfTime,
+    // });
+
     clearInterval(metricsInterval);
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
-    setIsActive(false);
-    setIsBreak(true);
-    setTimeLeft(breakTime);
     setFirstHalfStats({
       characterTyped: charactersTyped,
       mistakes: mistakes,
       timeSpent: halfTime,
     });
 
-    // Start break timer in a separate interval
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    console.log("first half stats", firstHalfStats);
+
+    // console.log("Starting break period");
+    setIsActive(false);
+    setIsBreak(true);
+    setTimeLeft(breakTime); //checkpoint 1
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
+          console.log("Break time ended, starting second half");
           clearInterval(timerRef.current);
           timerRef.current = null;
           startSecondHalf();
@@ -192,6 +245,7 @@ const TypingTest = () => {
   };
 
   const startSecondHalf = () => {
+    
     setIsBreak(false);
     setIsSecondHalf(true);
     setTimeLeft(halfTime);
@@ -201,38 +255,19 @@ const TypingTest = () => {
     fetchRandomText();
   };
 
+
   const handleTestComplete = () => {
-    console.log("Test complete!");
+    // console.log("Test completed. Preparing final metrics");
     clearInterval(metricsInterval);
-
-    const saveMetrics = async () => {
-      try {
-        await axios.post(`${backendUrl}/metrics`, {
-          userId,
-          firstHalf: currentMetrics.firstHalf,
-          secondHalf: currentMetrics.secondHalf,
-          halfTime,
-          breakTime,
-        });
-      } catch (error) {
-        console.error("Error saving metrics:", error);
-      }
-    };
-
-    saveMetrics();
-
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    setIsActive(false);
 
     const secondHalfStats = {
       characterTyped: charactersTyped,
       mistakes: mistakes,
       timeSpent: halfTime,
     };
+
+    // console.log("Second half stats:", secondHalfStats);
+    // console.log("First half stats:", firstHalfStats);
 
     const totalStats = {
       name: userData.name,
@@ -244,7 +279,35 @@ const TypingTest = () => {
       breakTime,
     };
 
+    // console.log("Preparing to save total stats:", totalStats);
+
+    // Save metrics to backend
+    const saveMetrics = async () => {
+      try {
+        console.log("Saving metrics to backend:", {
+          userId,
+          firstHalf: currentMetrics.firstHalf,
+          secondHalf: currentMetrics.secondHalf,
+        });
+
+        // await axios.post(`${backendUrl}/metrics`, {
+        //   userId,
+        //   firstHalf: currentMetrics.firstHalf,
+        //   secondHalf: currentMetrics.secondHalf,
+        //   halfTime,
+        //   breakTime,
+        // });
+        // console.log("Metrics saved successfully");
+      } catch (error) {
+        console.error("Error saving metrics:", error);
+      }
+    };
+
+    // saveMetrics();
+    console.log("final metrics", currentMetrics);
     saveTestData(totalStats);
+
+    // console.log("Resetting test state");
     setUserInput("");
     setMistakes(0);
     setCharactersTyped(0);
@@ -277,7 +340,10 @@ const TypingTest = () => {
   // };
 
   const saveTestData = async (stats) => {
-    if (!userData || !stats) return;
+    if (!userData || !stats) {
+      // console.log("Missing userData or stats, cannot save test data");
+      return;
+    }
 
     const testData = {
       name: userData.name,
@@ -293,9 +359,17 @@ const TypingTest = () => {
       secondHalf: stats.secondHalf,
     };
 
+    // console.log("Saving complete test data:", testData);
+
     try {
-      await axios.post(`${backendUrl}/tests`, testData);
-      setTestHistory((prev) => [...prev, testData]);
+      const response = await axios.post(`${backendUrl}/tests`, testData);
+      // console.log("Test data saved successfully:", response.data);
+
+      setTestHistory((prev) => {
+        const updatedHistory = [...prev, testData];
+        // console.log("Updated test history:", updatedHistory);
+        return updatedHistory;
+      });
     } catch (error) {
       console.error("Error saving test data:", error);
     }
