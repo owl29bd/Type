@@ -87,13 +87,12 @@ const TypingTest = () => {
   const handleUserSubmit = async (data) => {
     try {
       console.log(data);
-      // setUserData(data);
-      // return;
-      const response = await axios.post(`${backendUrl}/users`, data);
-      setUserId(response.data._id);
+      // const response = await axios.post(`${backendUrl}/users`, data);
+      setUserId(123456);
       setUserData(data);
       setShowModal(false);
       setEnableEditor(true);
+      console.log("user submit handled");
     } catch (error) {
       console.error("Error saving user data:", error);
     }
