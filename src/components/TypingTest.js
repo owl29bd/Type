@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import UserModal from "./UserModal";
-import UserDetailsCard from "./UserDetails";
+import UserDetailsCard from "./UserDetailsCard";
 
 const backendUrl = process.env.REACT_APP_API_URL;
 
@@ -21,7 +21,6 @@ const TypingTest = () => {
   const [userData, setUserData] = useState(null);
   const [showModal, setShowModal] = useState(true);
   const [enableEditor, setEnableEditor] = useState(false);
-  // TODO: ui change on user submit -> show a card containing user details
   const [testHistory, setTestHistory] = useState([]);
   // const [showTimeSettings, setShowTimeSettings] = useState(false);
   const [charactersTyped, setCharactersTyped] = useState(0);
@@ -62,6 +61,7 @@ const TypingTest = () => {
   const fetchSettings = async () => {
     try {
       const response = await axios.get(`${backendUrl}/settings`);
+      console.log("Settings response:", response.data);
       setHalfTime(response.data.halfTime || 120);
       setBreakTime(response.data.breakTime || 30);
       setTimeLeft(response.data.halfTime || 120);
@@ -72,9 +72,8 @@ const TypingTest = () => {
 
   const fetchRandomText = async () => {
     try {
-      console.log("Fetching random text...");
-      console.log(`${backendUrl}/texts/random`);
       const response = await axios.get(`${backendUrl}/texts/random`);
+      console.log("Text response:", response.data);
       setGivenText(response.data.content);
       mistakeTracker.current = new Array(response.data.content.length).fill(
         false
@@ -87,12 +86,14 @@ const TypingTest = () => {
 
   const handleUserSubmit = async (data) => {
     try {
+      console.log(data);
+      // setUserData(data);
+      // return;
       const response = await axios.post(`${backendUrl}/users`, data);
       setUserId(response.data._id);
       setUserData(data);
       setShowModal(false);
       setEnableEditor(true);
-      // TODO: ui change on user submit -> show a card containing user details
     } catch (error) {
       console.error("Error saving user data:", error);
     }
@@ -123,6 +124,8 @@ const TypingTest = () => {
         },
       }));
     }, 10000); // every 10 seconds
+
+    console.log("Current metrics:", currentMetrics);
 
     setMetricsInterval(interval);
   };
@@ -200,6 +203,7 @@ const TypingTest = () => {
   };
 
   const handleTestComplete = () => {
+    console.log("Test complete!");
     clearInterval(metricsInterval);
 
     const saveMetrics = async () => {
@@ -299,6 +303,7 @@ const TypingTest = () => {
   };
 
   const resetTest = () => {
+    // TODO: send data to server before resetting
     setUserInput("");
     setMistakes(0);
     setCharactersTyped(0);
@@ -332,16 +337,15 @@ const TypingTest = () => {
 
   return (
     <div className="min-h-screen flex flex-row-reverse p-8 justify-around items-center mx-auto bg-gray-900 text-white">
-      <div className="border-2 max-w-fit">
+      <div className="max-w-fit">
         {showModal ? (
           <UserModal isOpen={true} onSubmit={handleUserSubmit} />
         ) : (
-          <div className="border-2 p-8">
-            <div className="border-2 p-2">
-              <UserDetailsCard />
-            </div>
-            user details card
-          </div>
+          <UserDetailsCard
+            name={userData.name || "Anonymous"}
+            reg={userData.registrationNumber}
+            dept={userData.department}
+          />
         )}
       </div>
 
@@ -354,12 +358,6 @@ const TypingTest = () => {
               <p>Characters Typed: {charactersTyped}</p>
             </div>
             <div className="flex flex-col gap-2">
-              {/* <button
-                onClick={() => setShowTimeSettings(!showTimeSettings)}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-              >
-                {showTimeSettings ? 'Hide Settings' : 'Change Time Settings'}
-              </button> */}
               <button
                 onClick={resetTest}
                 className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
